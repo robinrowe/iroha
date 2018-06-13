@@ -16,6 +16,7 @@
  */
 
 #include "torii/query_service.hpp"
+#include "backend/protobuf/query_responses/proto_block_query_response.hpp"
 #include "backend/protobuf/query_responses/proto_query_response.hpp"
 #include "cryptography/default_hash_provider.hpp"
 #include "validators/default_validator.hpp"
@@ -25,6 +26,7 @@ namespace torii {
   QueryService::QueryService(
       std::shared_ptr<iroha::torii::QueryProcessor> query_processor)
       : query_processor_(query_processor) {
+    log_ = logger::log("Query Service");
     //    Subscribe on result from iroha
     query_processor_->queryNotifier().subscribe(
         [this](const std::shared_ptr<shared_model::interface::QueryResponse>
@@ -73,11 +75,11 @@ namespace torii {
             },
             [&hash,
              &response](const iroha::expected::Error<std::string> &error) {
-              response.set_query_hash(
-                  hash.hex());
+              response.set_query_hash(hash.hex());
               response.mutable_error_response()->set_reason(
                   iroha::protocol::ErrorResponse::STATELESS_INVALID);
-              response.mutable_error_response()->set_message(std::move(error.error));
+              response.mutable_error_response()->set_message(
+                  std::move(error.error));
             });
   }
 
@@ -85,6 +87,61 @@ namespace torii {
                                   const iroha::protocol::Query *request,
                                   iroha::protocol::QueryResponse *response) {
     Find(*request, *response);
+    return grpc::Status::OK;
+  }
+
+  grpc::Status QueryService::FetchCommits(
+      grpc::ServerContext *context,
+      const iroha::protocol::BlocksQuery *request,
+      grpc::ServerWriter<iroha::protocol::BlockQueryResponse> *writer) {
+    log_->info("Fetching commits");
+    shared_model::proto::TransportBuilder<
+        shared_model::proto::BlocksQuery,
+        shared_model::validation::DefaultBlocksQueryValidator>()
+        .build(*request)
+        .match(
+            [this, writer](
+                const iroha::expected::Value<shared_model::proto::BlocksQuery>
+                    &query) {
+              query_processor_
+                  ->blocksQueryHandle(
+                      std::make_shared<shared_model::proto::BlocksQuery>(
+                          query.value))
+                  .as_blocking()
+                  .subscribe([this, writer](
+                                 const std::shared_ptr<shared_model::interface::
+                                                           BlockQueryResponse>
+                                     response) {
+                    log_->info("{} is subscribed on committed blocks", request->meta().creator_account_id());
+                    iroha::visit_in_place(
+                        response->get(),
+                        [writer](const shared_model::interface::BlockResponse
+                                     &block_response) {
+                          auto proto_block_response = static_cast<
+                              const shared_model::proto::BlockResponse &>(
+                              block_response);
+                          writer->Write(proto_block_response.getTransport());
+                        },
+                        [writer](
+                            const shared_model::interface::BlockErrorResponse
+                                &block_error_response) {
+                          auto proto_block_error_response = static_cast<
+                              const shared_model::proto::BlockErrorResponse &>(
+                              block_error_response);
+                          writer->WriteLast(
+                              proto_block_error_response.getTransport(),
+                              grpc::WriteOptions());
+                        });
+                  });
+            },
+            [this, writer](const auto &error) {
+              log_->info("Stateless invalid: {}", error.error);
+              iroha::protocol::BlockQueryResponse response;
+              auto error_response = response.mutable_error_response();
+              error_response->set_message(std::move(error.error));
+              writer->WriteLast(response, grpc::WriteOptions());
+            });
+
     return grpc::Status::OK;
   }
 
