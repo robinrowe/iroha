@@ -100,39 +100,51 @@ namespace torii {
         shared_model::validation::DefaultBlocksQueryValidator>()
         .build(*request)
         .match(
-            [this, writer](
+            [this, context, request, writer](
                 const iroha::expected::Value<shared_model::proto::BlocksQuery>
                     &query) {
+              rxcpp::composite_subscription sub;
               query_processor_
                   ->blocksQueryHandle(
                       std::make_shared<shared_model::proto::BlocksQuery>(
                           query.value))
                   .as_blocking()
-                  .subscribe([this, writer](
-                                 const std::shared_ptr<shared_model::interface::
-                                                           BlockQueryResponse>
-                                     response) {
-                    log_->info("{} is subscribed on committed blocks", request->meta().creator_account_id());
-                    iroha::visit_in_place(
-                        response->get(),
-                        [writer](const shared_model::interface::BlockResponse
-                                     &block_response) {
-                          auto proto_block_response = static_cast<
-                              const shared_model::proto::BlockResponse &>(
-                              block_response);
-                          writer->Write(proto_block_response.getTransport());
-                        },
-                        [writer](
-                            const shared_model::interface::BlockErrorResponse
-                                &block_error_response) {
-                          auto proto_block_error_response = static_cast<
-                              const shared_model::proto::BlockErrorResponse &>(
-                              block_error_response);
-                          writer->WriteLast(
-                              proto_block_error_response.getTransport(),
-                              grpc::WriteOptions());
-                        });
-                  });
+                  .subscribe(
+                      sub,
+                      [this, context, &sub, request, writer](
+                          const std::shared_ptr<
+                              shared_model::interface::BlockQueryResponse>
+                              response) {
+                        if (context->IsCancelled()) {
+                          log_->info("Unsubscribed");
+                          sub.unsubscribe();
+                        } else {
+                          log_->info("{} receives committed block",
+                                     request->meta().creator_account_id());
+                          iroha::visit_in_place(
+                              response->get(),
+                              [writer](
+                                  const shared_model::interface::BlockResponse
+                                      &block_response) {
+                                auto proto_block_response = static_cast<
+                                    const shared_model::proto::BlockResponse &>(
+                                    block_response);
+                                writer->Write(
+                                    proto_block_response.getTransport());
+                              },
+                              [writer](const shared_model::interface::
+                                           BlockErrorResponse
+                                               &block_error_response) {
+                                auto proto_block_error_response =
+                                    static_cast<const shared_model::proto::
+                                                    BlockErrorResponse &>(
+                                        block_error_response);
+                                writer->WriteLast(
+                                    proto_block_error_response.getTransport(),
+                                    grpc::WriteOptions());
+                              });
+                        }
+                      });
             },
             [this, writer](const auto &error) {
               log_->info("Stateless invalid: {}", error.error);
