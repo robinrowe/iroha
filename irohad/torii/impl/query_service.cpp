@@ -25,8 +25,7 @@ namespace torii {
 
   QueryService::QueryService(
       std::shared_ptr<iroha::torii::QueryProcessor> query_processor)
-      : query_processor_(query_processor) {
-    log_ = logger::log("Query Service");
+      : query_processor_(query_processor), log_(logger::log("Query Service")) {
     //    Subscribe on result from iroha
     query_processor_->queryNotifier().subscribe(
         [this](const std::shared_ptr<shared_model::interface::QueryResponse>

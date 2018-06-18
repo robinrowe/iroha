@@ -50,7 +50,7 @@ namespace torii_utils {
 
     void FetchCommits(
         const iroha::protocol::BlocksQuery &blocks_query,
-        std::vector<iroha::protocol::BlockQueryResponse> responses);
+        std::vector<iroha::protocol::BlockQueryResponse> &responses);
 
    private:
     void swap(QuerySyncClient &lhs, QuerySyncClient &rhs);

@@ -57,7 +57,7 @@ namespace torii_utils {
 
   void QuerySyncClient::FetchCommits(
       const iroha::protocol::BlocksQuery &blocks_query,
-      std::vector<iroha::protocol::BlockQueryResponse> responses) {
+      std::vector<iroha::protocol::BlockQueryResponse>& responses) {
     grpc::ClientContext context;
     iroha::protocol::BlockQueryResponse resp;
     auto reader = stub_->FetchCommits(&context, blocks_query);
