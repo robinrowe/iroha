@@ -2,8 +2,6 @@ import sys
 sys.path.insert(0, 'build/shared_model/bindings')
 import iroha
 
-import block_pb2
-import endpoint_pb2
 import endpoint_pb2_grpc
 import queries_pb2
 import grpc
