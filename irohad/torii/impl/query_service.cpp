@@ -118,22 +118,27 @@ namespace torii {
                           log_->info("Unsubscribed");
                           sub.unsubscribe();
                         } else {
-                          log_->info("{} receives committed block",
-                                     request->meta().creator_account_id());
                           iroha::visit_in_place(
                               response->get(),
-                              [writer](
+                              [this, writer, request](
                                   const shared_model::interface::BlockResponse
                                       &block_response) {
+                                log_->info(
+                                    "{} receives committed block",
+                                    request->meta().creator_account_id());
                                 auto proto_block_response = static_cast<
                                     const shared_model::proto::BlockResponse &>(
                                     block_response);
                                 writer->Write(
                                     proto_block_response.getTransport());
                               },
-                              [writer](const shared_model::interface::
-                                           BlockErrorResponse
-                                               &block_error_response) {
+                              [this, writer, request](
+                                  const shared_model::interface::
+                                      BlockErrorResponse
+                                          &block_error_response) {
+                                log_->info("{} received error with message: {}",
+                                           request->meta().creator_account_id(),
+                                           block_error_response.message());
                                 auto proto_block_error_response =
                                     static_cast<const shared_model::proto::
                                                     BlockErrorResponse &>(
