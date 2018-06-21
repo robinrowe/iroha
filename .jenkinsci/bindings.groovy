@@ -108,7 +108,8 @@ def doAndroidBindings(abiVersion) {
     [currentPath, "\$PLATFORM", abiVersion, "\$BUILD_TYPE_A", sh(script: 'date "+%Y%m%d"', returnStdout: true).trim(), commit.substring(0,6)])
   sh """
     (cd /iroha; git init; git remote add origin https://github.com/hyperledger/iroha.git; \
-    git fetch --depth 1 origin develop; git checkout -t origin/develop)
+    # TODO possible race on consequent pushes to the same branch
+    git fetch --depth 1 origin ${env.GIT_LOCAL_BRANCH}; git checkout -t ${env.GIT_BRANCH})
   """
   sh """
     . /entrypoint.sh; \
